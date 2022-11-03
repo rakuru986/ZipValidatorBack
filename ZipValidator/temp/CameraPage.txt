@@ -1,0 +1,494 @@
+using ImageFromXamarinUI;
+using KaredusRakendus.Models;
+using KaredusRakendus.Views.SettingsView.Popups;
+using Microsoft.AppCenter.Crashes;
+using NativeMedia;
+using Newtonsoft.Json;
+using Plugin.Geolocator;
+using Plugin.Geolocator.Abstractions;
+using SkiaSharp;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using Xamarin.CommunityToolkit.Extensions;
+using Xamarin.Essentials;
+using Xamarin.Forms;
+using Xamarin.Forms.Xaml;
+
+namespace KaredusRakendus.Views
+{
+    [XamlCompilation(XamlCompilationOptions.Compile)]
+    public partial class CameraPage : ContentPage
+    {
+        private bool _onPage = true;
+        List<string> _pictureDetails = new List<string>();
+        Position _location;
+        String _orientation;
+
+        private string _gpsAccuracy;
+        public string GPSAccuracy
+        {
+            get { return _gpsAccuracy; }
+            set
+            {
+                _gpsAccuracy = value;
+                OnPropertyChanged(nameof(GPSAccuracy)); // Notify that there was a change on this property
+            }
+        }
+        private string _currentTime;
+        public string CurrentTime
+        {
+            get { return _currentTime; }
+            set
+            {
+                _currentTime = value;
+                OnPropertyChanged(nameof(CurrentTime)); // Notify that there was a change on this property
+            }
+        }
+
+        private string _currentDate;
+        public string CurrentDate
+        {
+            get { return _currentDate; }
+            set
+            {
+                _currentDate = value;
+                OnPropertyChanged(nameof(CurrentDate)); // Notify that there was a change on this property
+            }
+        }
+
+        private string _currentRoadName;
+        public string CurrentRoadName
+        {
+            get { return _currentRoadName; }
+            set
+            {
+                _currentRoadName = value;
+                OnPropertyChanged(nameof(CurrentRoadName)); // Notify that there was a change on this property
+            }
+        }
+
+        private string _currentRoadNumber;
+        public string CurrentRoadNumber
+        {
+            get { return _currentRoadNumber; }
+            set
+            {
+                _currentRoadNumber = value;
+                OnPropertyChanged(nameof(CurrentRoadNumber)); // Notify that there was a change on this property
+            }
+        }
+
+        private string _currentRoadMeter;
+        public string CurrentRoadMeter
+        {
+            get { return _currentRoadMeter; }
+            set
+            {
+                _currentRoadMeter = value;
+                OnPropertyChanged(nameof(CurrentRoadMeter)); // Notify that there was a change on this property
+            }
+        }
+
+        private string _currentRoadCondition;
+        public string CurrentRoadCondition
+        {
+            get { return _currentRoadCondition; }
+            set
+            {
+                _currentRoadCondition = value;
+                OnPropertyChanged(nameof(CurrentRoadCondition)); // Notify that there was a change on this property
+            }
+        }
+
+        private string _gpsColorCode;
+        public string GPSColorCode
+        {
+            get { return _gpsColorCode; }
+            set
+            {
+                _gpsColorCode = value;
+                OnPropertyChanged(nameof(GPSColorCode)); // Notify that there was a change on this property
+            }
+        }
+        public CameraPage()
+        {
+            BindingContext = this;
+            InitializeComponent();
+
+            
+ 
+            GetPermission();
+            
+            Thread getInfoThread = new Thread(GetInfo);
+            getInfoThread.Start();           
+
+            //GetInfo();
+        }
+
+        private async void GetPermission()
+        {
+            await Permissions.RequestAsync<Permissions.StorageWrite>();
+        }
+
+        private async void GetInfo()
+        {
+            HttpClient httpClient = new HttpClient();
+            string RoadInfoUrl = "https://tanel.jairus.ee/teed_json.php?k=";
+
+
+            while (_onPage)
+            {
+                DateTime time = DateTime.Now;
+
+                if (Preferences.Get("ManualPictureDateButtonChecked", true) == true)
+                {
+                    CurrentDate = time.ToString("dd-MM-yyyy");
+                }
+                else
+                {
+                    DateLabel.IsVisible = false;
+                    DateLabelShadow.IsVisible = false;
+                }
+                if (Preferences.Get("ManualPictureTimeButtonChecked", true) == true)
+                {
+                    CurrentTime = time.ToString("H:mm:ss");
+                }
+                else
+                {
+                    TimeLabel.IsVisible = false;
+                    TimeLabelShadow.IsVisible=false;
+                }
+
+                try
+                {
+                    var locator = CrossGeolocator.Current;
+                    _location = await locator.GetPositionAsync(TimeSpan.FromSeconds(60), null);
+                }
+                catch {}
+
+                if (Preferences.Get("ManualPictureGPSButtonChecked", true) == true || Preferences.Get("ManualPictureGPSCircleButtonChecked", true) == true)
+                {
+                    if (_location != null)
+                    {
+                        GetGPSAccuracy(_location);
+                    }                    
+                }
+                if(Preferences.Get("ManualPictureGPSButtonChecked", false) == true)
+                {
+                    GPSLabel.IsVisible = false;
+                    GPSLabelShadow.IsVisible = false;
+                }
+                if(Preferences.Get("ManualPictureGPSCircleButtonChecked", false) == true)
+                {
+                    GPSCircle.IsVisible = false;
+                }
+
+                if (Preferences.Get("ManualPictureRoadInfoButtonChecked", true) == true)
+                {
+
+                    if (_location != null)
+                    {
+                        string CurrentLatitude = _location.Latitude.ToString();
+                        string CurrentLongitude = _location.Longitude.ToString();
+
+                        if (Connectivity.ConnectionProfiles.Contains(ConnectionProfile.WiFi) || Connectivity.ConnectionProfiles.Contains(ConnectionProfile.Cellular))
+                        {
+                            //var resultJson = await httpClient.GetStringAsync($"{RoadInfoUrl}{CurrentLatitude},{CurrentLongitude}");
+
+                            var resultJson = await httpClient.GetStringAsync(RoadInfoUrl+CurrentLatitude+","+CurrentLongitude);
+
+
+
+                            if (resultJson.Contains("null") || resultJson == "")
+                            {
+                                CurrentRoadName = "Road info missing";
+                                CurrentRoadNumber = "Road info missing";
+                                CurrentRoadMeter = "Road info missing";
+                                //CurrentRoadCondition = "Road info missing";
+                            }
+                            else
+                            {
+                                var roadInfo = JsonConvert.DeserializeObject<RoadInfo>(resultJson);
+
+                                CurrentRoadName = roadInfo.RoadName;
+                                CurrentRoadNumber = roadInfo.RoadNumber.ToString();
+                                CurrentRoadMeter = roadInfo.RoadMeter.ToString();
+                                //CurrentRoadCondition = roadInfo.RoadCondition.ToString();
+                            }
+
+                        }
+                        else
+                        {
+                            CurrentRoadName = "No internet connection";
+                            CurrentRoadNumber = "No internet connection";
+                            CurrentRoadMeter = "No internet connection";
+                        }
+                    }
+                    else
+                    {
+                        CurrentRoadName = "Can't find location";
+                        CurrentRoadNumber = "Can't find location";
+                        CurrentRoadMeter = "Can't find location";
+                    }
+                }
+                else
+                {
+                    CurrentRoadLabel.IsVisible = false;
+                    CurrentRoadLabelShadow.IsVisible = false;
+                    CurrentRoadMeterLabel.IsVisible = false;
+                    CurrentRoadMeterLabelShadow.IsVisible = false;
+                    CurrentRoadNumberLabel.IsVisible = false;
+                    CurrentRoadNumberLabelShadow.IsVisible = false;
+                    //CurrentRoadConditionLabel.IsVisible = false;
+                }
+
+            }
+        }
+        
+
+        private void GetGPSAccuracy(Position location)
+        {
+            GPSAccuracy = Math.Round((decimal)location.Accuracy).ToString();
+            if (location.Accuracy <= 15)
+            {
+                GPSColorCode = "#31C531";
+            }
+            else if (location.Accuracy > 15 && location.Accuracy < 25)
+            {
+                GPSColorCode = "Yellow";
+            }
+            else
+            {
+                GPSColorCode = "Red";
+            }
+        }
+
+        private void doCameraThings_Clicked(object sender, EventArgs e)
+        {
+            cameraView.Shutter();
+       
+        }
+
+        private void cameraView_MediaCaptured(object sender, Xamarin.CommunityToolkit.UI.Views.MediaCapturedEventArgs e)
+        {
+            if (e.ImageData != null)
+            {
+                //var thread = new ThreadStart(() => WriteDetailsOnThePicture(e.ImageData));
+                var bkThread = new Thread(thread);
+                bkThread.Start();
+            }
+
+        }
+
+        //protected override void OnSizeAllocated(double width, double height)
+        //{
+        //    base.OnSizeAllocated(width, height);
+
+        //    if (!DeviceInfo.IsOrientationPortrait() && width > height || DeviceInfo.IsOrientationPortrait() && width < height)
+        //    {
+        //        _orientation = "landscape";
+        //    }
+        //    else
+        //    {
+        //        _orientation = "portrait";
+        //    }
+        //}
+
+
+
+        //public class DeviceInfo
+        //{
+        //    protected static DeviceInfo _instance;
+        //    double width;
+        //    double height;
+
+        //    static DeviceInfo()
+        //    {
+        //        _instance = new DeviceInfo();
+        //    }
+        //    protected DeviceInfo()
+        //    {
+        //    }
+
+        //    public static bool IsOrientationPortrait()
+        //    {
+        //        return _instance.height > _instance.width;
+        //    }
+
+        //    public static void SetSize(double width, double height)
+        //    {
+        //        _instance.width = width;
+        //        _instance.height = height;
+        //    }
+        //}
+
+        //private async void WriteDetailsOnThePicture(byte[] imageData)
+        //{
+           
+        //    SKBitmap bitmap = SKBitmap.Decode(imageData);
+
+            
+
+        //    SKBitmap _editedBitmap;
+
+
+
+        //    SKBitmap rotated;
+
+
+        //    if (_orientation == "portrait")
+        //    {
+        //        rotated = new SKBitmap(bitmap.Height, bitmap.Width);
+        //    }
+        //    else
+        //    {
+        //        rotated = new SKBitmap(bitmap.Width, bitmap.Height);
+        //    }
+
+        //    var yellowColor = new SKColor(255, 255, 0);
+        //    var blackColor = new SKColor(0, 0, 0);
+        //    var yellowPaint = new SKPaint { Color = yellowColor, FilterQuality = SKFilterQuality.High, TextSize = 70 };
+        //    var blackPaint = new SKPaint { Color = blackColor, FilterQuality = SKFilterQuality.High, TextSize = 70 };
+
+        //    _pictureDetails.Clear();
+        //    _pictureDetails.Add($"GPS accuracy in meters: {GPSAccuracy}");
+        //    _pictureDetails.Add($"Road name: {CurrentRoadName}");
+        //    _pictureDetails.Add($"Road number: {CurrentRoadNumber}");
+        //    _pictureDetails.Add($"Road meter: {CurrentRoadMeter}");
+        //    //_pictureDetails.Add($"Road condition: {CurrentRoadCondition}");
+        //    _pictureDetails.Add($"Date: {CurrentDate}");
+        //    _pictureDetails.Add($"Time: {CurrentTime}");
+
+
+        //    using (var surface = new SKCanvas(rotated))
+        //    {
+        //        if (_orientation == "portrait")
+        //        {
+        //            surface.Translate(rotated.Width, 0);
+        //            surface.RotateDegrees(90);
+        //        }
+
+        //        surface.DrawBitmap(bitmap, 0, 0);
+        //    }
+
+        //    _editedBitmap = rotated;
+        //    using (var surface = new SKCanvas(_editedBitmap))
+        //    {
+        //        var x1 = 15;
+        //        var x2 = 7;
+        //        var y1 = 73;
+        //        var y2 = 65;
+
+        //        foreach (var info in _pictureDetails)
+        //        {
+        //            surface.DrawText(info, x1, y1, blackPaint);
+        //            surface.DrawText(info, x2, y2, yellowPaint);
+        //            y1 += 80;
+        //            y2 += 80;
+        //        }
+        //    }
+
+        //    SKImage image = SKImage.FromBitmap(_editedBitmap);
+        //    SKData encodedData = image.Encode(SKEncodedImageFormat.Png, 80);
+
+        //    string imagePath = Path.Combine(FileSystem.CacheDirectory, "image.png");
+        //    var bitmapImageStream = File.Open(imagePath,
+        //                                  FileMode.Create,
+        //                                  FileAccess.Write,
+        //                                  FileShare.None);
+        //    encodedData.SaveTo(bitmapImageStream);
+        //    bitmapImageStream.Flush(true);
+        //    bitmapImageStream.Dispose();
+
+
+        //    //var imageStream = encodedData.AsStream();
+
+        //    var status = await Permissions.RequestAsync<SaveMediaPermission>();
+
+        //    if (status != PermissionStatus.Granted)
+        //        return;
+
+        //    if(bitmapImageStream != null)
+        //    {
+        //        try
+        //        {
+        //            await MediaGallery.SaveAsync(MediaFileType.Image, imagePath);
+        //        }
+        //        catch
+        //        {
+        //            Device.BeginInvokeOnMainThread(async () =>
+        //            {
+        //                await DisplayAlert("Could not save picture", "There was a problem with saving photo to gallery", "OK");
+        //            });
+        //        }
+                
+        //    }
+
+            
+
+        //}
+
+        
+
+        //protected override void OnDisappearing()
+        //{
+        //    _onPage = false;
+        //    base.OnDisappearing();
+        //}
+
+        //private async void goToGallery_Clicked(object sender, EventArgs e)
+        //{
+
+        //    var results = await MediaGallery.PickAsync(3, MediaFileType.Image);
+        //    //var file = await MediaPicker.PickPhotoAsync();
+
+        //    //if (file == null)
+        //    //    return;
+
+        //    //Application.Current.Properties["PickedPhotoFile"] = file;
+
+        //    var pictures = new List<ImageSource>();
+
+
+        //    if (results.Files == null)
+        //    {
+        //        return;
+        //    }
+             
+
+
+        //    foreach (var media in results.Files)
+        //    {
+        //        var stream = await media.OpenReadAsync();
+        //        pictures.Add(ImageSource.FromStream(() => stream));
+        //    }
+
+        //    Application.Current.Properties["PickedPhotoFile"] = pictures;
+
+        //    if (pictures.Count > 0)
+        //    {
+        //        var result = await Navigation.ShowPopupAsync(new PicturePopup()
+        //        {
+        //            Size = new Size(350, 600),
+        //        });
+        //        if ((string)result == "https://listen.maant.ee/index.php")
+        //        {
+
+        //            Device.BeginInvokeOnMainThread(async () =>
+        //            {
+        //                await DisplayAlert("Could not upload to server", $"There was a problem with {result}, check if website is up", "OK");
+        //            });
+ 
+        //        }
+        //    }
+
+
+        //}
+    }
+}

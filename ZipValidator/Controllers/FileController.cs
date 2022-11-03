@@ -48,9 +48,7 @@ namespace ZipValidator.Controllers
 
                     if (zip.EntryFileNames.Contains(fileName + "/dlls/") && zip.EntryFileNames.Contains(fileName + "/images/") && zip.EntryFileNames.Contains(fileName + "/languages/"))
                     {
-                        List<string> dllsList = new List<string>();
-                        List<string> imagesList = new List<string>();
-                        List<string> languagesList = new List<string>();
+                        
 
                         bool containsRootFileDLL = false;
                         bool containsOneImagePngOrJpg = false;
@@ -66,7 +64,7 @@ namespace ZipValidator.Controllers
 
 
 
-                            if (e.FileName.StartsWith(fileName + "/dlls") && e.FileName.EndsWith("/"))
+                            if (e.FileName.StartsWith(fileName + "/dlls/"+fileName+".dll"))
                             {
                                 containsRootFileDLL = true;
 
@@ -80,20 +78,19 @@ namespace ZipValidator.Controllers
                                 }
                                 else if (!e.FileName.EndsWith(".jpg") || !e.FileName.EndsWith(".png"))
                                 {
-
-                                    return StatusCode(StatusCodes.Status400BadRequest);
+                                    return Ok("only .png or .jpg files in images");
                                 }
                             }
                             else if (e.FileName.StartsWith(fileName + "/languages") && !e.FileName.EndsWith('/'))
                             {
-                                if (e.FileName.StartsWith(fileName + "/languages/CatGame_en.xml"))
+                                if (e.FileName.StartsWith(fileName + "/languages/"+fileName+"_en.xml"))
                                 {
                                     containsRootFileLanguage = true;
                                 }
                                 if (!e.FileName.EndsWith(".xml"))
                                 {
 
-                                    return StatusCode(StatusCodes.Status400BadRequest);
+                                    return Ok("only .xml files in images");
                                 }
 
                                 string languageCode;
@@ -104,7 +101,7 @@ namespace ZipValidator.Controllers
                                 if (!e.FileName.EndsWith(".xml") || !e.FileName.StartsWith(fileName + "/languages/" + fileName + '_') || languageCode.Length > 2)
                                 {
 
-                                    return StatusCode(StatusCodes.Status400BadRequest);
+                                    return Ok("wrong language code");
                                 }
 
                             }
@@ -112,32 +109,32 @@ namespace ZipValidator.Controllers
 
                         string response= "";
 
-                        if (containsRootFileDLL)
+                        if (!containsRootFileDLL)
                         {
-                            response += "no RootFOlder.dll file in dlls folder; ";
+                            
+                            return Ok("no RootFolder.dll file in dlls folder");
                         }
 
-                        if (containsOneImagePngOrJpg || containsRootFileLanguage)
+                        if (!containsOneImagePngOrJpg)
                         {
-
-                            response += "no .png or .jpg file in images; ";
+                            return Ok("no .png or .jpg file in images");
                         }
-                        if (containsRootFileLanguage) 
-                        {
-                            response += "no RootFolder_en.xml in languages; ";
+                        if (!containsRootFileLanguage) 
+                        {                            
+                            return Ok("no RootFolder_en.xml in languages");
                         }
 
 
 
 
-                        return StatusCode(StatusCodes.Status400BadRequest);
 
+                        return Ok("zip validated");
 
 
                     }
                     else
                     {
-                        return StatusCode(StatusCodes.Status400BadRequest);
+                        return Ok("folder structure wrong");
                     }
 
                     stream.Close();
@@ -178,7 +175,7 @@ namespace ZipValidator.Controllers
 
 
 
-                return StatusCode(StatusCodes.Status201Created);
+                return Ok("zip saved");
             }
 
             catch (Exception)
@@ -205,7 +202,7 @@ namespace ZipValidator.Controllers
                     file.Delete(); 
                 }
 
-                return StatusCode(StatusCodes.Status201Created);
+                return Ok("zips deleted");
             }
 
             catch (Exception) 
