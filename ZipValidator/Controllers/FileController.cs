@@ -45,6 +45,7 @@ namespace ZipValidator.Controllers
 
 
 
+
                     if (zip.EntryFileNames.Contains(fileName + "/dlls/") && zip.EntryFileNames.Contains(fileName + "/images/") && zip.EntryFileNames.Contains(fileName + "/languages/"))
                     {
                         List<string> dllsList = new List<string>();
